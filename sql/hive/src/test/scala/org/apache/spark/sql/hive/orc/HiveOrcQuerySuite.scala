@@ -149,6 +149,52 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
     }
   }
 
+  test("FDG-4295 - ORC hive table column reordering - Lookup by position") {
+    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "native") {
+      withTempPath { dir =>
+        withTable("test_user_orc") {
+          // Case - Read as is
+          sql(
+            s"""create external table test_user_orc (`id` long,
+               |`user` struct<age: int, name: struct<first: string, last: string>>)
+               |stored as orc location "${dir.toURI}"""".stripMargin)
+          sql(
+            s"""insert into test_user_orc select 1, NAMED_STRUCT('age', 10, 'name',
+               |NAMED_STRUCT('first', 'myfirst', 'last', 'mylast'))""".stripMargin)
+          val query = "select `id`,`user`.age,`user`.name.first,`user`.name.last from test_user_orc"
+          val df0 = spark.sql(query)
+          sql("drop table test_user_orc")
+
+          // Case:0 - depth-0 column re-order
+          sql(
+            s"""create external table test_user_orc (
+               |`user` struct<age: int, name: struct<first: string, last: string>>,
+               |`id` long) stored as orc location "${dir.toURI}"""".stripMargin)
+          val df1 = spark.sql(query)
+          checkAnswer(df1, df0)
+          sql("drop table test_user_orc")
+
+          // Case:1 - sub-struct column re-order
+          sql(
+            s"""create external table test_user_orc (`id` long,
+               |`user` struct<name: struct<last: string, first: string>, age: int>)
+               |stored as orc location "${dir.toURI}"""".stripMargin)
+          val df2 = spark.sql(query)
+          checkAnswer(df2, df0)
+          sql("drop table test_user_orc")
+
+          // Case:2 - all column re-order
+          sql(
+            s"""create external table test_user_orc (
+               |`user` struct<name: struct<last: string, first: string>, age: int>,
+               |`id` long) stored as orc location "${dir.toURI}"""".stripMargin)
+          val df3 = spark.sql(query)
+          checkAnswer(df3, df0)
+        }
+      }
+    }
+  }
+
   test("SPARK-20728 Make ORCFileFormat configurable between sql/hive and sql/core") {
     Seq(
       ("native", classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat]),
