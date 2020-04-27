@@ -118,6 +118,14 @@ object OrcUtils extends Logging {
             -1
           }
         })
+        Some(requiredSchema.fieldNames.zipWithIndex.map { case (requiredFieldName, idx) =>
+          val index = dataSchema.fieldIndex(requiredFieldName)
+          if (index < orcFieldNames.length) {
+            idx
+          } else {
+            -1
+          }
+        })
       } else {
         if (isCaseSensitive) {
           Some(requiredSchema.fieldNames.zipWithIndex.map { case (name, idx) =>
