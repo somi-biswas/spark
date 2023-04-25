@@ -183,7 +183,6 @@ object OrcUtils extends Logging {
                 if (matchedOrcFields.size > 1) {
                   // Need to fail if there is ambiguity, i.e. more than one field is matched.
                   val matchedOrcFieldsString = matchedOrcFields.mkString("[", ", ", "]")
-                  reader.close()
                   throw new RuntimeException(s"""Found duplicate field(s) "$requiredFieldName": """
                     + s"$matchedOrcFieldsString in case-insensitive mode")
                 } else {
@@ -203,6 +202,7 @@ object OrcUtils extends Logging {
     writer.addUserMetadata(SPARK_VERSION_METADATA_KEY, UTF_8.encode(SPARK_VERSION_SHORT))
   }
 
+
   /**
    * Given a `StructType` object, this methods converts it to corresponding string representation
    * in ORC.
@@ -219,6 +219,7 @@ object OrcUtils extends Logging {
       s"map<${orcTypeDescriptionString(m.keyType)},${orcTypeDescriptionString(m.valueType)}>"
     case _ => dt.catalogString
   }
+
 
   /**
    * Returns the result schema to read from ORC file. In addition, It sets
@@ -246,4 +247,5 @@ object OrcUtils extends Logging {
     OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
     resultSchemaString
   }
+
 }
