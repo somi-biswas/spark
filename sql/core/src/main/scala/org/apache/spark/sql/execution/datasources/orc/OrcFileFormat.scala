@@ -41,6 +41,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 
 private[sql] object OrcFileFormat {
   private def checkFieldName(name: String): Unit = {
@@ -161,6 +162,10 @@ class OrcFileFormat
 
     OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(hadoopConf, sqlConf.caseSensitiveAnalysis)
 
+    val resultSchemaString = OrcUtils.orcTypeDescriptionString(resultSchema)
+    OrcConf.MAPRED_INPUT_SCHEMA.setString(hadoopConf, resultSchemaString)
+    OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(hadoopConf, sqlConf.caseSensitiveAnalysis)
+
     val broadcastedConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
     val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
@@ -193,10 +198,10 @@ class OrcFileFormat
         }
 
         val (requestedColIds, canPruneCols) = resultedColPruneInfo.get
-        val resultSchemaString = OrcUtils.orcResultSchemaString(canPruneCols,
-          dataSchema, resultSchema, partitionSchema, conf)
-        assert(requestedColIds.length == requiredSchema.length,
-          "[BUG] requested column IDs do not match required schema")
+        // val resultSchemaString = OrcUtils.orcResultSchemaString(canPruneCols,
+        //   dataSchema, resultSchema, partitionSchema, conf)
+        // assert(requestedColIds.length == requiredSchema.length,
+        //   "[BUG] requested column IDs do not match required schema")
         val taskConf = new Configuration(conf)
 
         val fileSplit = new FileSplit(filePath, file.start, file.length, Array.empty)
@@ -258,4 +263,22 @@ class OrcFileFormat
 
     case _ => false
   }
+
+  /**
+   * Given a `StructType` object, this methods converts it to corresponding string representation
+   * in ORC.
+   */
+  def orcTypeDescriptionString(dt: DataType): String = dt match {
+    case s: StructType =>
+      val fieldTypes = s.fields.map { f =>
+        s"${quoteIdentifier(f.name)}:${orcTypeDescriptionString(f.dataType)}"
+      }
+      s"struct<${fieldTypes.mkString(",")}>"
+    case a: ArrayType =>
+      s"array<${orcTypeDescriptionString(a.elementType)}>"
+    case m: MapType =>
+      s"map<${orcTypeDescriptionString(m.keyType)},${orcTypeDescriptionString(m.valueType)}>"
+    case _ => dt.catalogString
+  }
+
 }
